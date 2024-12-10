@@ -22,22 +22,20 @@ class Paint(object):
         self.eraser_on = False
         self.old_x = None
         self.old_y = None
-        self.drawing_shape = None  # Хранит текущую фигуру
+        self.drawing_shape = None
         self.start_x = None
         self.start_y = None
-        self.current_shape_id = None  # ID текущей рисуемой фигуры
+        self.current_shape_id = None
 
-        self.recent_colors = []  # Список для хранения последних использованных цветов
+        self.recent_colors = []
 
-        # Создание панели инструментов сверху
         self.tool_panel = Frame(self.root)
-        self.tool_panel.pack(side=TOP, fill=X)  # Изменено на pack с fill=X
+        self.tool_panel.pack(side=TOP, fill=X)
 
         self.create_tool_buttons()
 
-        # Создание холста
         self.c = Canvas(self.root, bg='white', width=800, height=800)
-        self.c.pack(side=TOP, fill=BOTH, expand=True, padx=5, pady=5)  # Изменено на pack
+        self.c.pack(side=TOP, fill=BOTH, expand=True, padx=5, pady=5)
 
         self.image = Image.new("RGB", (800, 800), "white")
         self.draw = ImageDraw.Draw(self.image)
@@ -50,51 +48,45 @@ class Paint(object):
     def create_menu(self):
         menubar = Menu(self.root)
 
-        # Создаем меню "File"
         file_menu = Menu(menubar, tearoff=0)
         file_menu.add_command(label="Save", command=self.save_image)
         file_menu.add_command(label="Load", command=self.load_image)
         file_menu.add_command(label="Clear", command=self.clear_canvas)
         menubar.add_cascade(label="File", menu=file_menu)
 
-        # Создаем меню "Shapes"
         shapes_menu = Menu(menubar, tearoff=0)
-        shapes_menu.add_command(image=self.square_icon, command=self.select_square)
-        shapes_menu.add_command(image=self.circle_icon, command=self.select_circle)
+        shapes_menu.add_command(label="Квадрат", command=self.select_square)
+        shapes_menu.add_command(label="Круг", command=self.select_circle)
+        shapes_menu.add_command(label="Прямая сплошная", command=self.select_line)
+        shapes_menu.add_command(label="Прямая пунктиром", command=self.select_dashed_line)
         menubar.add_cascade(label="Shapes", menu=shapes_menu)
 
         self.root.config(menu=menubar)
 
     def create_tool_buttons(self):
-        # Кнопка для ручки
         pen_button = Button(self.tool_panel, text="Ручка", command=self.use_pen)
         pen_button.pack(side=LEFT, padx=5, pady=5)
 
-        # Кнопка для ластика
         eraser_button = Button(self.tool_panel, text="Ластик", command=self.use_eraser)
         eraser_button.pack(side=LEFT, padx=5, pady=5)
 
-        # Ползунок для выбора толщины линии
         self.line_width_scale = Scale(self.tool_panel, from_=1, to=10, orient=HORIZONTAL, label="Толщина линии", command=self.change_line_width)
-        self.line_width_scale.set(self.line_width)  # Установить начальное значение
+        self.line_width_scale.set(self.line_width)
         self.line_width_scale.pack(side=LEFT, padx=10, pady=5)
 
-        # Кнопка для выбора цвета
         fill_button = Button(self.tool_panel, text="Выбор цвета", command=self.choose_color)
         fill_button.pack(side=LEFT, padx=5, pady=5)
 
-        # Виджет для отображения текущего цвета
         self.color_display = Label(self.tool_panel, bg=self.color, width=10, height=2)
         self.color_display.pack(side=LEFT, padx=10, pady=5)
 
-        # Последние использованные цвета
         self.color_frame = Frame(self.tool_panel)
         self.color_frame.pack(side=LEFT, padx=5, pady=5)
 
         Label(self.color_frame, text="Последние цвета:").pack()
 
         self.color_buttons = []
-        for _ in range(5):  # Максимум 5 последних цветов
+        for _ in range(5):
             btn = Button(self.color_frame, bg='white', command=lambda c=None: self.set_color(c), width=2, height=1)
             btn.pack(side=LEFT, padx=1, pady=1)
             self.color_buttons.append(btn)
@@ -104,14 +96,13 @@ class Paint(object):
         if color:
             self.color = color
             self.add_recent_color(color)
-            self.update_color_display()  # Обновляем отображение цвета
+            self.update_color_display()
 
     def update_color_display(self):
-        # Обновление цвета в виджете отображения цвета
         self.color_display.config(bg=self.color)
 
     def change_line_width(self, value):
-        self.line_width = int(value)  # Обновляем толщину линии при выборе
+        self.line_width = int(value)
 
     def select_square(self):
         self.drawing_shape = 'square'
@@ -121,11 +112,18 @@ class Paint(object):
         self.drawing_shape = 'circle'
         self.eraser_on = False
 
+    def select_line(self):
+        self.drawing_shape = 'line'
+        self.eraser_on = False
+
+    def select_dashed_line(self):
+        self.drawing_shape = 'dashed_line'
+        self.eraser_on = False
+
     def use_pen(self):
         self.eraser_on = False
         self.drawing_shape = None
         print("Режим ручки активирован. Выберите цвет отдельно.")
-
     def flood_fill(self, event):
         x, y = event.x, event.y
         target_color = self.image.getpixel((x, y))
@@ -184,7 +182,7 @@ class Paint(object):
                 self.current_shape_id = self.c.create_oval(self.start_x, self.start_y, self.start_x, self.start_y, outline=self.color, width=self.line_width)
 
     def paint(self, event):
-        if self.drawing_shape is None:  # Если не рисуем фигуру, используем кисть
+        if self.drawing_shape is None:
             paint_color = 'white' if self.eraser_on else self.color
             if self.old_x and self.old_y:
                 self.c.create_line(self.old_x, self.old_y, event.x, event.y,
@@ -195,7 +193,6 @@ class Paint(object):
             self.old_x = event.x
             self.old_y = event.y
 
-        # Обновление фигуры во время движения мыши
         if self.current_shape_id:
             end_x = event.x
             end_y = event.y
@@ -203,21 +200,59 @@ class Paint(object):
                 self.c.coords(self.current_shape_id, self.start_x, self.start_y, end_x, end_y)
             elif self.drawing_shape == 'circle':
                 self.c.coords(self.current_shape_id, self.start_x, self.start_y, end_x, end_y)
+            elif self.drawing_shape == 'triangle':
+                self.update_triangle(end_x, end_y)
+            elif self.drawing_shape == 'line':
+                self.c.coords(self.current_shape_id, self.start_x, self.start_y, end_x, end_y)
+            elif self.drawing_shape == 'dashed_line':
+                self.update_dashed_line(end_x, end_y)
+
+    def update_triangle(self, end_x, end_y):
+        self.c.coords(self.current_shape_id, 
+                    self.start_x, self.start_y, 
+                    end_x, end_y,
+                    (self.start_x + end_x) / 2, self.start_y)
+
+    def update_dashed_line(self, end_x, end_y):
+        self.c.delete(self.current_shape_id)
+        self.current_shape_id = self.c.create_line(self.start_x, self.start_y, end_x, end_y,
+                                                    width=self.line_width, fill=self.color, dash=(4, 2))
+
+    def start_shape(self, event):
+        if self.drawing_shape in ['square', 'circle', 'triangle', 'line', 'dashed_line']:
+            self.start_x = event.x
+            self.start_y = event.y
+            if self.drawing_shape == 'square':
+                self.current_shape_id = self.c.create_rectangle(self.start_x, self.start_y, self.start_x, self.start_y, outline=self.color, width=self.line_width)
+            elif self.drawing_shape == 'circle':
+                self.current_shape_id = self.c.create_oval(self.start_x, self.start_y, self.start_x, self.start_y, outline=self.color, width=self.line_width)
+            elif self.drawing_shape == 'triangle':
+                self.current_shape_id = self.c.create_polygon(self.start_x, self.start_y, self.start_x, self.start_y, self.start_x, self.start_y, outline=self.color, width=self.line_width)
+            elif self.drawing_shape == 'line':
+                self.current_shape_id = self.c.create_line(self.start_x, self.start_y, self.start_x, self.start_y, fill=self.color, width=self.line_width)
+            elif self.drawing_shape == 'dashed_line':
+                self.current_shape_id = self.c.create_line(self.start_x, self.start_y, self.start_x, self.start_y, fill=self.color, width=self.line_width, dash=(4, 2))
 
     def reset(self, event):
         if self.current_shape_id:
             end_x = event.x
             end_y = event.y
-            # Сохраняем фигуру в изображение
             if self.drawing_shape == 'square':
                 self.draw.rectangle([self.start_x, self.start_y, end_x, end_y], outline=self.color, width=self.line_width)
             elif self.drawing_shape == 'circle':
                 self.draw.ellipse([self.start_x, self.start_y, end_x, end_y], outline=self.color, width=self.line_width)
+            elif self.drawing_shape == 'triangle':
+                self.draw.polygon([self.start_x, self.start_y, end_x, end_y,
+                                   (self.start_x + end_x) / 2, self.start_y - abs(end_y - self.start_y)],
+                                   outline=self.color, width=self.line_width)
+            elif self.drawing_shape == 'line':
+                self.draw.line([self.start_x, self.start_y, end_x, end_y], fill=self.color, width=self.line_width)
+            elif self.drawing_shape == 'dashed_line':
+                self.draw.line([self.start_x, self.start_y, end_x, end_y], fill=self.color, width=self.line_width)
 
-        # Сброс режима рисования
         self.current_shape_id = None
         self.old_x, self.old_y = None, None
-        self.drawing_shape = None  # Сброс режима рисования фигуры
+        self.drawing_shape = None
 
     def save_image(self):
         file_path = filedialog.asksaveasfilename(defaultextension=".png",
