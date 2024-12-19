@@ -4,7 +4,6 @@ from tkinter import filedialog
 from PIL import Image, ImageDraw, ImageTk
 
 class Paint(object):
-
     DEFAULT_COLOR = 'black'
     DEFAULT_LINE_WIDTH = 5
 
@@ -42,6 +41,7 @@ class Paint(object):
         self.c.bind('<B1-Motion>', self.paint)
         self.c.bind('<ButtonRelease-1>', self.reset)
         self.c.bind('<ButtonPress-1>', self.start_shape)
+        self.c.bind('<Button-3>', self.bucket_fill)  # Правый клик для заливки
 
         self.root.mainloop()
 
@@ -69,6 +69,9 @@ class Paint(object):
 
         eraser_button = Button(self.tool_panel, text="Ластик", command=self.use_eraser)
         eraser_button.pack(side=LEFT, padx=5, pady=5)
+
+        select_button = Button(self.tool_panel, text="Выделение", command=self.use_selection)
+        select_button.pack(side=LEFT, padx=5, pady=5)
 
         self.line_width_scale = Scale(self.tool_panel, from_=1, to=10, orient=HORIZONTAL, label="Толщина линии", command=self.change_line_width)
         self.line_width_scale.set(self.line_width)
@@ -123,7 +126,11 @@ class Paint(object):
     def use_pen(self):
         self.eraser_on = False
         self.drawing_shape = None
-        print("Режим ручки активирован. Выберите цвет отдельно.")
+
+    def use_selection(self):
+        self.drawing_shape = 'selection'
+        self.eraser_on = False
+
     def flood_fill(self, event):
         x, y = event.x, event.y
         target_color = self.image.getpixel((x, y))
@@ -151,35 +158,66 @@ class Paint(object):
         self._flood_fill(x, y + 1, target_color, replacement_color)
         self._flood_fill(x, y - 1, target_color, replacement_color)
 
+    def bucket_fill(self, event):
+        x, y = event.x, event.y
+        target_color = self.image.getpixel((x, y))
+
+        if target_color == self.color:
+            return
+
+        stack = [(x, y)]
+        visited = set()
+        while stack:
+            current_x, current_y = stack.pop()
+            if (current_x, current_y) in visited:
+                continue
+
+            self.image.putpixel((current_x, current_y), self.color)
+            visited.add((current_x, current_y))
+
+            for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                nx, ny = current_x + dx, current_y + dy
+                if 0 <= nx < self.image.width and 0 <= ny < self.image.height:
+                    if self.image.getpixel((nx, ny)) == target_color:
+                        stack.append((nx, ny))
+
+        self.update_canvas()
+
     def set_color(self, color):
         if color:
             self.color = color
-            self.update_color_display()  # Обновляем отображение цвета при выборе из последних цветов
+            self.update_color_display()
 
     def add_recent_color(self, color):
         if color and color not in self.recent_colors:
             self.recent_colors.append(color)
             if len(self.recent_colors) > 5:
-                self.recent_colors.pop(0)  # Удаляем самый старый цвет
+                self.recent_colors.pop(0)
             self.update_color_buttons()
 
     def update_color_buttons(self):
         for btn, color in zip(self.color_buttons, self.recent_colors):
             btn.config(bg=color)
-            btn.config(command=lambda c=color: self.set_color(c))  # Устанавливаем команду для кнопок
+            btn.config(command=lambda c=color: self.set_color(c))
 
     def use_eraser(self):
         self.eraser_on = True
         self.drawing_shape = None
 
     def start_shape(self, event):
-        if self.drawing_shape in ['square', 'circle']:
+        if self.drawing_shape in ['square', 'circle', 'line', 'dashed_line', 'selection']:
             self.start_x = event.x
             self.start_y = event.y
             if self.drawing_shape == 'square':
                 self.current_shape_id = self.c.create_rectangle(self.start_x, self.start_y, self.start_x, self.start_y, outline=self.color, width=self.line_width)
             elif self.drawing_shape == 'circle':
                 self.current_shape_id = self.c.create_oval(self.start_x, self.start_y, self.start_x, self.start_y, outline=self.color, width=self.line_width)
+            elif self.drawing_shape == 'line':
+                self.current_shape_id = self.c.create_line(self.start_x, self.start_y, self.start_x, self.start_y, fill=self.color, width=self.line_width)
+            elif self.drawing_shape == 'dashed_line':
+                self.current_shape_id = self.c.create_line(self.start_x, self.start_y, self.start_x, self.start_y, fill=self.color, width=self.line_width, dash=(4, 2))
+            elif self.drawing_shape == 'selection':
+                self.current_shape_id = self.c.create_rectangle(self.start_x, self.start_y, self.start_x, self.start_y, outline='blue', dash=(4, 2))
 
     def paint(self, event):
         if self.drawing_shape is None:
@@ -200,18 +238,12 @@ class Paint(object):
                 self.c.coords(self.current_shape_id, self.start_x, self.start_y, end_x, end_y)
             elif self.drawing_shape == 'circle':
                 self.c.coords(self.current_shape_id, self.start_x, self.start_y, end_x, end_y)
-            elif self.drawing_shape == 'triangle':
-                self.update_triangle(end_x, end_y)
             elif self.drawing_shape == 'line':
                 self.c.coords(self.current_shape_id, self.start_x, self.start_y, end_x, end_y)
             elif self.drawing_shape == 'dashed_line':
                 self.update_dashed_line(end_x, end_y)
-
-    def update_triangle(self, end_x, end_y):
-        self.c.coords(self.current_shape_id, 
-                    self.start_x, self.start_y, 
-                    end_x, end_y,
-                    (self.start_x + end_x) / 2, self.start_y)
+            elif self.drawing_shape == 'selection':
+                self.c.coords(self.current_shape_id, self.start_x, self.start_y, end_x, end_y)
 
     def update_dashed_line(self, end_x, end_y):
         self.c.delete(self.current_shape_id)
@@ -226,8 +258,6 @@ class Paint(object):
                 self.current_shape_id = self.c.create_rectangle(self.start_x, self.start_y, self.start_x, self.start_y, outline=self.color, width=self.line_width)
             elif self.drawing_shape == 'circle':
                 self.current_shape_id = self.c.create_oval(self.start_x, self.start_y, self.start_x, self.start_y, outline=self.color, width=self.line_width)
-            elif self.drawing_shape == 'triangle':
-                self.current_shape_id = self.c.create_polygon(self.start_x, self.start_y, self.start_x, self.start_y, self.start_x, self.start_y, outline=self.color, width=self.line_width)
             elif self.drawing_shape == 'line':
                 self.current_shape_id = self.c.create_line(self.start_x, self.start_y, self.start_x, self.start_y, fill=self.color, width=self.line_width)
             elif self.drawing_shape == 'dashed_line':
@@ -241,10 +271,6 @@ class Paint(object):
                 self.draw.rectangle([self.start_x, self.start_y, end_x, end_y], outline=self.color, width=self.line_width)
             elif self.drawing_shape == 'circle':
                 self.draw.ellipse([self.start_x, self.start_y, end_x, end_y], outline=self.color, width=self.line_width)
-            elif self.drawing_shape == 'triangle':
-                self.draw.polygon([self.start_x, self.start_y, end_x, end_y,
-                                   (self.start_x + end_x) / 2, self.start_y - abs(end_y - self.start_y)],
-                                   outline=self.color, width=self.line_width)
             elif self.drawing_shape == 'line':
                 self.draw.line([self.start_x, self.start_y, end_x, end_y], fill=self.color, width=self.line_width)
             elif self.drawing_shape == 'dashed_line':
