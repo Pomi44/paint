@@ -24,6 +24,8 @@ class Paint(object):
         self.current_shape_id = None
 
         self.recent_colors = []
+        self.history = []  # Хранение истории действий
+        self.redo_stack = []  # Хранение для повтора
 
         self.tool_panel = Frame(self.root)
         self.tool_panel.pack(side=TOP, fill=X)
@@ -39,6 +41,10 @@ class Paint(object):
         self.c.bind('<ButtonRelease-1>', self.reset)
         self.c.bind('<ButtonPress-1>', self.start_shape)
         self.c.bind('<Button-3>', self.bucket_fill)  # Правый клик для заливки
+
+        # Обработчики клавиатуры
+        self.root.bind('<Control-z>', self.undo)
+        self.root.bind('<Control-y>', self.redo)
 
         self.root.mainloop()
 
@@ -70,6 +76,12 @@ class Paint(object):
         fill_button = Button(self.tool_panel, text="Заливка", command=self.use_bucket_fill)
         fill_button.pack(side=LEFT, padx=5, pady=5)
 
+        undo_button = Button(self.tool_panel, text="Отмена (Ctrl+Z)", command=self.undo)
+        undo_button.pack(side=LEFT, padx=5, pady=5)
+
+        redo_button = Button(self.tool_panel, text="Повтор (Ctrl+Y)", command=self.redo)
+        redo_button.pack(side=LEFT, padx=5, pady=5)
+
         self.line_width_scale = Scale(self.tool_panel, from_=1, to=10, orient=HORIZONTAL, label="Толщина линии")
         self.line_width_scale.set(self.line_width)
         self.line_width_scale.pack(side=LEFT, padx=10, pady=5)
@@ -90,6 +102,48 @@ class Paint(object):
             btn = Button(self.color_frame, bg='white', command=lambda c=None: self.set_color(c), width=2, height=1)
             btn.pack(side=LEFT, padx=1, pady=1)
             self.color_buttons.append(btn)
+
+    def save_image(self):
+        file_path = filedialog.asksaveasfilename(defaultextension=".png",
+                                                   filetypes=[("PNG files", "*.png"),
+                                                              ("JPEG files", "*.jpg"),
+                                                              ("All files", "*.*")])
+        if file_path:
+            self.image.save(file_path)
+
+    def load_image(self):
+        file_path = filedialog.askopenfilename(filetypes=[("PNG files", "*.png"),
+                                                           ("JPEG files", "*.jpg"),
+                                                           ("All files", "*.*")])
+        if file_path:
+            loaded_image = Image.open(file_path).convert("RGB")
+            self.image.paste(loaded_image)
+            self.update_canvas()
+
+    def clear_canvas(self):
+        self.c.delete("all")
+        self.image = Image.new("RGB", (800, 800), "white")
+        self.draw = ImageDraw.Draw(self.image)
+
+    def undo(self, event=None):
+        if self.history:
+            last_action = self.history.pop()
+            self.redo_stack.append(self.image.copy())  # Сохраняем текущее состояние в redo_stack
+            self.image = last_action  # Восстанавливаем предыдущее состояние
+            self.update_canvas()
+
+    def redo(self, event=None):
+        if self.redo_stack:
+            action = self.redo_stack.pop()
+            self.history.append(self.image.copy())  # Сохраняем текущее состояние в history
+            self.image = action  # Восстанавливаем состояние
+            self.update_canvas()
+
+    def update_canvas(self):
+        self.c.delete("all")
+        # Создаем изображение для отображения
+        self.tk_image = ImageTk.PhotoImage(self.image)
+        self.c.create_image(0, 0, anchor=NW, image=self.tk_image)
 
     def use_bucket_fill(self):
         self.drawing_shape = 'bucket_fill'  # Устанавливаем режим заливки
@@ -127,10 +181,6 @@ class Paint(object):
         self.eraser_on = False
         self.drawing_shape = None
 
-    def use_selection(self):
-        self.drawing_shape = 'selection'
-        self.eraser_on = False
-
     def bucket_fill(self, event):
         x, y = event.x, event.y
         target_color = self.image.getpixel((x, y))  # Получаем цвет пикселя
@@ -138,9 +188,11 @@ class Paint(object):
         if target_color_hex == self.color:
             return  # Если цвет уже тот же, ничего не делаем
 
-        self._flood_fill(x, y, target_color, self.hex_to_rgb(self.color))
+        # Сохраняем текущее состояние перед заливкой
+        self.history.append(self.image.copy())
+        self.redo_stack.clear()  # Очищаем стек повтора
 
-        # Обновляем холст, чтобы отобразить изменения
+        self._flood_fill(x, y, target_color, self.hex_to_rgb(self.color))
         self.update_canvas()
 
     def _flood_fill(self, x, y, target_color, replacement_color):
@@ -176,7 +228,7 @@ class Paint(object):
             raise ValueError(f"Неверный формат цвета: {color}")
         
         return tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
-    
+
     def set_color(self, color):
         if color:
             self.color = color
@@ -199,7 +251,11 @@ class Paint(object):
         self.drawing_shape = None
 
     def start_shape(self, event):
-        if self.drawing_shape in ['square', 'circle', 'line', 'dashed_line', 'selection']:
+        # Сохраняем текущее состояние перед началом рисования
+        self.history.append(self.image.copy())
+        self.redo_stack.clear()  # Очищаем стек повтора
+
+        if self.drawing_shape in ['square', 'circle', 'line', 'dashed_line']:
             self.start_x = event.x
             self.start_y = event.y
             if self.drawing_shape == 'square':
@@ -210,8 +266,6 @@ class Paint(object):
                 self.current_shape_id = self.c.create_line(self.start_x, self.start_y, self.start_x, self.start_y, fill=self.color, width=self.line_width)
             elif self.drawing_shape == 'dashed_line':
                 self.current_shape_id = self.c.create_line(self.start_x, self.start_y, self.start_x, self.start_y, fill=self.color, width=self.line_width, dash=(4, 2))
-            elif self.drawing_shape == 'selection':
-                self.current_shape_id = self.c.create_rectangle(self.start_x, self.start_y, self.start_x, self.start_y, outline='blue', dash=(4, 2))
 
     def paint(self, event):
         if self.drawing_shape is None:
@@ -236,25 +290,11 @@ class Paint(object):
                 self.c.coords(self.current_shape_id, self.start_x, self.start_y, end_x, end_y)
             elif self.drawing_shape == 'dashed_line':
                 self.update_dashed_line(end_x, end_y)
-            elif self.drawing_shape == 'selection':
-                self.c.coords(self.current_shape_id, self.start_x, self.start_y, end_x, end_y)
 
     def update_dashed_line(self, end_x, end_y):
         self.c.delete(self.current_shape_id)
         self.current_shape_id = self.c.create_line(self.start_x, self.start_y, end_x, end_y,
                                                     width=self.line_width, fill=self.color, dash=(4, 2))
-    def start_shape(self, event):
-        if self.drawing_shape in ['square', 'circle', 'triangle', 'line', 'dashed_line']:
-            self.start_x = event.x
-            self.start_y = event.y
-            if self.drawing_shape == 'square':
-                self.current_shape_id = self.c.create_rectangle(self.start_x, self.start_y, self.start_x, self.start_y, outline=self.color, width=self.line_width)
-            elif self.drawing_shape == 'circle':
-                self.current_shape_id = self.c.create_oval(self.start_x, self.start_y, self.start_x, self.start_y, outline=self.color, width=self.line_width)
-            elif self.drawing_shape == 'line':
-                self.current_shape_id = self.c.create_line(self.start_x, self.start_y, self.start_x, self.start_y, fill=self.color, width=self.line_width)
-            elif self.drawing_shape == 'dashed_line':
-                self.current_shape_id = self.c.create_line(self.start_x, self.start_y, self.start_x, self.start_y, fill=self.color, width=self.line_width, dash=(4, 2))
 
     def reset(self, event):
         if self.current_shape_id:
@@ -269,37 +309,13 @@ class Paint(object):
             elif self.drawing_shape == 'dashed_line':
                 self.draw.line([self.start_x, self.start_y, end_x, end_y], fill=self.color, width=self.line_width)
 
+            # Сохраняем состояние после завершения рисования
+            self.history.append(self.image.copy())
+            self.redo_stack.clear()  # Очищаем стек повтора
+
         self.current_shape_id = None
         self.old_x, self.old_y = None, None
         self.drawing_shape = None
-
-    def save_image(self):
-        file_path = filedialog.asksaveasfilename(defaultextension=".png",
-                                                   filetypes=[("PNG files", "*.png"),
-                                                              ("JPEG files", "*.jpg"),
-                                                              ("All files", "*.*")])
-        if file_path:
-            self.image.save(file_path)
-
-    def load_image(self):
-        file_path = filedialog.askopenfilename(filetypes=[("PNG files", "*.png"),
-                                                           ("JPEG files", "*.jpg"),
-                                                           ("All files", "*.*")])
-        if file_path:
-            loaded_image = Image.open(file_path)
-            self.image.paste(loaded_image)
-            self.update_canvas()
-
-    def update_canvas(self):
-        self.c.delete("all")
-        # Создаем изображение для отображения
-        self.tk_image = ImageTk.PhotoImage(self.image)
-        self.c.create_image(0, 0, anchor=NW, image=self.tk_image)
-
-    def clear_canvas(self):
-        self.c.delete("all")
-        self.image = Image.new("RGB", (800, 800), "white")
-        self.draw = ImageDraw.Draw(self.image)
 
 if __name__ == '__main__':
     Paint()
