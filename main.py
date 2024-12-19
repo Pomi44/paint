@@ -11,9 +11,6 @@ class Paint(object):
         self.root = Tk()
         self.root.title("Paint")
 
-        self.square_icon = PhotoImage(file='icons/square.png')
-        self.circle_icon = PhotoImage(file='icons/circle.png')
-
         self.create_menu()
 
         self.line_width = self.DEFAULT_LINE_WIDTH
@@ -70,15 +67,15 @@ class Paint(object):
         eraser_button = Button(self.tool_panel, text="Ластик", command=self.use_eraser)
         eraser_button.pack(side=LEFT, padx=5, pady=5)
 
-        select_button = Button(self.tool_panel, text="Выделение", command=self.use_selection)
-        select_button.pack(side=LEFT, padx=5, pady=5)
+        fill_button = Button(self.tool_panel, text="Заливка", command=self.use_bucket_fill)
+        fill_button.pack(side=LEFT, padx=5, pady=5)
 
-        self.line_width_scale = Scale(self.tool_panel, from_=1, to=10, orient=HORIZONTAL, label="Толщина линии", command=self.change_line_width)
+        self.line_width_scale = Scale(self.tool_panel, from_=1, to=10, orient=HORIZONTAL, label="Толщина линии")
         self.line_width_scale.set(self.line_width)
         self.line_width_scale.pack(side=LEFT, padx=10, pady=5)
 
-        fill_button = Button(self.tool_panel, text="Выбор цвета", command=self.choose_color)
-        fill_button.pack(side=LEFT, padx=5, pady=5)
+        color_button = Button(self.tool_panel, text="Выбор цвета", command=self.choose_color)
+        color_button.pack(side=LEFT, padx=5, pady=5)
 
         self.color_display = Label(self.tool_panel, bg=self.color, width=10, height=2)
         self.color_display.pack(side=LEFT, padx=10, pady=5)
@@ -93,6 +90,9 @@ class Paint(object):
             btn = Button(self.color_frame, bg='white', command=lambda c=None: self.set_color(c), width=2, height=1)
             btn.pack(side=LEFT, padx=1, pady=1)
             self.color_buttons.append(btn)
+
+    def use_bucket_fill(self):
+        self.drawing_shape = 'bucket_fill'  # Устанавливаем режим заливки
 
     def choose_color(self):
         color = askcolor(color=self.color)[1]
@@ -131,58 +131,52 @@ class Paint(object):
         self.drawing_shape = 'selection'
         self.eraser_on = False
 
-    def flood_fill(self, event):
+    def bucket_fill(self, event):
         x, y = event.x, event.y
-        target_color = self.image.getpixel((x, y))
-
-        if target_color == self.color:
+        target_color = self.image.getpixel((x, y))  # Получаем цвет пикселя
+        target_color_hex = '#{:02x}{:02x}{:02x}'.format(*target_color)  # Преобразуем в hex
+        if target_color_hex == self.color:
             return  # Если цвет уже тот же, ничего не делаем
 
-        self._flood_fill(x, y, target_color, self.color)
+        self._flood_fill(x, y, target_color, self.hex_to_rgb(self.color))
 
         # Обновляем холст, чтобы отобразить изменения
         self.update_canvas()
 
     def _flood_fill(self, x, y, target_color, replacement_color):
-        if x < 0 or x >= self.image.width or y < 0 or y >= self.image.height:
-            return
-        if self.image.getpixel((x, y)) != target_color:
-            return
-
-        # Заменяем цвет пикселя
-        self.image.putpixel((x, y), replacement_color)
-
-        # Рекурсивно заполняем соседние пиксели
-        self._flood_fill(x + 1, y, target_color, replacement_color)
-        self._flood_fill(x - 1, y, target_color, replacement_color)
-        self._flood_fill(x, y + 1, target_color, replacement_color)
-        self._flood_fill(x, y - 1, target_color, replacement_color)
-
-    def bucket_fill(self, event):
-        x, y = event.x, event.y
-        target_color = self.image.getpixel((x, y))
-
-        if target_color == self.color:
-            return
-
         stack = [(x, y)]
-        visited = set()
+
         while stack:
-            current_x, current_y = stack.pop()
-            if (current_x, current_y) in visited:
+            x, y = stack.pop()
+
+            if x < 0 or x >= self.image.width or y < 0 or y >= self.image.height:
+                continue
+            if self.image.getpixel((x, y)) != target_color:
+                continue
+            if self.image.getpixel((x, y)) == replacement_color:
                 continue
 
-            self.image.putpixel((current_x, current_y), self.color)
-            visited.add((current_x, current_y))
+            self.image.putpixel((x, y), replacement_color)
 
-            for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                nx, ny = current_x + dx, current_y + dy
-                if 0 <= nx < self.image.width and 0 <= ny < self.image.height:
-                    if self.image.getpixel((nx, ny)) == target_color:
-                        stack.append((nx, ny))
+            # Добавляем соседние пиксели в стек
+            stack.append((x + 1, y))
+            stack.append((x - 1, y))
+            stack.append((x, y + 1))
+            stack.append((x, y - 1))
 
-        self.update_canvas()
+    def hex_to_rgb(self, color):
+        """Преобразует цвет в формате hex или название цвета в кортеж RGB."""
+        if color.startswith('#'):
+            hex_color = color[1:]  # Удаляем символ '#'
+        else:
+            # Преобразуем название цвета в RGB
+            hex_color = f"{self.root.winfo_rgb(color)[0] >> 8:02x}{self.root.winfo_rgb(color)[1] >> 8:02x}{self.root.winfo_rgb(color)[2] >> 8:02x}"
 
+        if len(hex_color) != 6:  # Проверяем длину
+            raise ValueError(f"Неверный формат цвета: {color}")
+        
+        return tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+    
     def set_color(self, color):
         if color:
             self.color = color
@@ -249,7 +243,6 @@ class Paint(object):
         self.c.delete(self.current_shape_id)
         self.current_shape_id = self.c.create_line(self.start_x, self.start_y, end_x, end_y,
                                                     width=self.line_width, fill=self.color, dash=(4, 2))
-
     def start_shape(self, event):
         if self.drawing_shape in ['square', 'circle', 'triangle', 'line', 'dashed_line']:
             self.start_x = event.x
@@ -299,7 +292,9 @@ class Paint(object):
 
     def update_canvas(self):
         self.c.delete("all")
-        self.c.create_image(0, 0, anchor=NW, image=self.image)
+        # Создаем изображение для отображения
+        self.tk_image = ImageTk.PhotoImage(self.image)
+        self.c.create_image(0, 0, anchor=NW, image=self.tk_image)
 
     def clear_canvas(self):
         self.c.delete("all")
