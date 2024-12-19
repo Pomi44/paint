@@ -76,10 +76,10 @@ class Paint(object):
         fill_button = Button(self.tool_panel, text="Заливка", command=self.use_bucket_fill)
         fill_button.pack(side=LEFT, padx=5, pady=5)
 
-        undo_button = Button(self.tool_panel, text="Отмена (Ctrl+Z)", command=self.undo)
+        undo_button = Button(self.tool_panel, text="Назад", command=self.undo)
         undo_button.pack(side=LEFT, padx=5, pady=5)
 
-        redo_button = Button(self.tool_panel, text="Повтор (Ctrl+Y)", command=self.redo)
+        redo_button = Button(self.tool_panel, text="Вперед", command=self.redo)
         redo_button.pack(side=LEFT, padx=5, pady=5)
 
         self.line_width_scale = Scale(self.tool_panel, from_=1, to=10, orient=HORIZONTAL, label="Толщина линии")
